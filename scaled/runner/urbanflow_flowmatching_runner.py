@@ -15,6 +15,15 @@ from flow_matching.path import AffineProbPath
 from flow_matching.solver import Solver, ODESolver
 from flow_matching.utils import ModelWrapper
 
+class WrappedModel(ModelWrapper):
+    def __init__(self, model,condition):
+        super().__init__(model)
+        self.condition = condition
+    
+    def forward(self, x: torch.Tensor, t: torch.Tensor, **extras):
+        input = torch.cat([self.condition,x],dim=1)
+        return self.model(input, t, **extras).sample
+
 class UrbanFlowFlowMatchingRunner(Runner):
     def __init__(self, config, model, dataset_info):
         super().__init__(config, model,dataset_info)
@@ -57,13 +66,13 @@ class UrbanFlowFlowMatchingRunner(Runner):
             ax.set_title(titles[i + 3])
             ax.axis('off')
             fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
+        
         plt.tight_layout()
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300)
         plt.close(fig)
-        
-    
+
+
     def visualize_results(self, prediction, ground_truth, previous_value, global_step):
         os.makedirs(os.path.join(self.sample_dir, str(global_step)), exist_ok=True)
         shape = prediction.shape
@@ -78,10 +87,15 @@ class UrbanFlowFlowMatchingRunner(Runner):
     
     def log_validation(self, model):
         index = random.randint(0, len(self.val_dataset)-1)
-        data_0,data_1,geometry = self.val_dataset[index]
-        data_0 = data_0.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
-        data_1 = data_1.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
-        output = model(data_0).sample
+        batch = self.val_dataset[index]
+        data_0 = batch[0].to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
+        data_bg = batch[1].to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
+        data_1 = batch[2].to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
+        con = torch.cat([data_0,data_bg],dim=1)
+        wrapped_vf = WrappedModel(model,con)
+        solver = ODESolver(velocity_model=wrapped_vf)
+        x_init = torch.randn_like(data_1)
+        output = solver.sample(x_init=x_init, method='midpoint', step_size = 0.01, return_intermediates=False)  # sample from the model
         prediction = output.detach().cpu().numpy().squeeze(0)
         ground_truth = data_1.detach().cpu().numpy().squeeze(0)
         previous_value = data_0.detach().cpu().numpy().squeeze(0)

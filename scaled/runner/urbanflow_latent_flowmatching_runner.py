@@ -3,19 +3,18 @@ import torch
 import os
 from diffusers.utils.import_utils import is_xformers_available
 import os
-from .urbanflow_diffusion_runner import UrbanflowDiffusionRunner
+from .urbanflow_flowmatching_runner import UrbanFlowFlowMatchingRunner
 from tqdm import tqdm
 import torch.nn.functional as F
 import time
 import math
-from scaled.pipelines.pipline_ddim_scaled_urbanflow import SCALEDUrbanFlowPipeline
 
-class UrbanFlowLatentDiffusionRunner(UrbanflowDiffusionRunner):
+class UrbanFlowLatentFlowMatchingRunner(UrbanFlowFlowMatchingRunner):
     def __init__(self, config, model,compression_model, dataset_info):
         super().__init__(config, model,dataset_info)
         self.compression_model = compression_model
         self.compression_model.to(self.accelerator.device)
-
+    
     def prepare_input(self, batch):
         data_0 = batch[0].to(self.weight_dtype)
         data_1 = batch[1].to(self.weight_dtype)
@@ -29,9 +28,9 @@ class UrbanFlowLatentDiffusionRunner(UrbanflowDiffusionRunner):
         shape = prediction.shape
         height = 128
         width = len(prediction) // height
-        prediction = [prediction[i] for i in range(shape[0])]
-        ground_truth = [ground_truth[i] for i in range(shape[0])]
-        previous_value = [previous_value[i] for i in range(shape[0])]
+        prediction = [prediction[i][4] for i in range(shape[0])]
+        ground_truth = [ground_truth[i][4] for i in range(shape[0])]
+        previous_value = [previous_value[i][4] for i in range(shape[0])]
         for i in range(shape[0]):
             save_path = os.path.join(self.sample_dir, str(global_step), f"visualize_{i}.png")
             self.visualize(prediction[i], ground_truth[i], previous_value[i], save_path)
@@ -77,7 +76,7 @@ class UrbanFlowLatentDiffusionRunner(UrbanflowDiffusionRunner):
         self.optimizer = self.accelerator.prepare(self.optimizer)
 
 
-class UrbanFlowLatentDiffusionV1Runner(UrbanFlowLatentDiffusionRunner):
+class UrbanFlowLatentFlowMatchingV1Runner(UrbanFlowFlowMatchingRunner):
     def __init__(self, config, model,compression_model,dataset_info):
         super().__init__(config, model,compression_model,dataset_info)
 
@@ -89,19 +88,12 @@ class UrbanFlowLatentDiffusionV1Runner(UrbanFlowLatentDiffusionRunner):
             latent_data_0 = self.compression_model.encode(data_0)/10
             latent_data_1 = self.compression_model.encode(data_1)/10
             latent_data_bg = self.compression_model.encode(data_bg)/10
-        # latent_data_0 = torch.cat([latent_data_0,latent_data_bg],dim=1)
-        return latent_data_0,latent_data_bg,latent_data_1
+        latent_data_0 = torch.cat([latent_data_0,latent_data_bg],dim=1)
+        return latent_data_0,latent_data_1
 
     def log_validation(self, model):
-        self.logger.info("Running validation... ")
-        if self.generator is None:
-            self.generator = torch.manual_seed(42)
         index = random.randint(0, len(self.val_dataset)-1)
         data_0,data_bg,data_1,_ = self.val_dataset[index]
-        pipe = SCALEDUrbanFlowPipeline(
-            model,
-            scheduler=self.scheduler,
-        )
         data_0 = data_0.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
         data_bg = data_bg.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
         data_1 = data_1.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
@@ -110,22 +102,48 @@ class UrbanFlowLatentDiffusionV1Runner(UrbanFlowLatentDiffusionRunner):
             latent_data_bg = self.compression_model.encode(data_bg)/10
             latent_data_1 = self.compression_model.encode(data_1)/10
         input_latent = torch.cat([latent_data_0,latent_data_bg],dim=1)
-        output = pipe(
-            input_latent,
-            num_inference_steps=25,
-            guidance_scale=0,
-            generator=self.generator,
-            return_dict=False,
-        )
+        output = model(input_latent).sample
         with torch.no_grad():
             prediction = self.compression_model.decode(output*10)
             ground_truth = self.compression_model.decode(latent_data_1*10)
             previous_value = self.compression_model.decode(latent_data_0*10)
-            # prediction = output
-            # ground_truth = latent_data_1
-            # previous_value = latent_data_0
         prediction = prediction.detach().cpu().numpy().squeeze(0)
         ground_truth = ground_truth.detach().cpu().numpy().squeeze(0)
         previous_value = previous_value.detach().cpu().numpy().squeeze(0)
-        del pipe
+        self.visualize_results(prediction, ground_truth, previous_value,self.global_step)
+
+class UrbanFlowLatentFlowMatchingV2Runner(UrbanFlowFlowMatchingRunner):
+    def __init__(self, config, model,compression_model,dataset_info):
+        super().__init__(config, model,compression_model,dataset_info)
+
+    def prepare_input(self, batch):
+        data_0 = batch[0].to(self.weight_dtype)
+        data_bg = batch[1].to(self.weight_dtype)
+        data_1 = batch[2].to(self.weight_dtype)
+        with torch.no_grad():
+            latent_data_0 = self.compression_model.encode(data_0).latent_dist.sample()/10
+            latent_data_1 = self.compression_model.encode(data_1).latent_dist.sample()/10
+            latent_data_bg = self.compression_model.encode(data_bg).latent_dist.sample()/10
+        latent_data_0 = torch.cat([latent_data_0,latent_data_bg],dim=1)
+        return latent_data_0,latent_data_1
+
+    def log_validation(self, model):
+        index = random.randint(0, len(self.val_dataset)-1)
+        data_0,data_bg,data_1,_ = self.val_dataset[index]
+        data_0 = data_0.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
+        data_bg = data_bg.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
+        data_1 = data_1.to(self.weight_dtype).to(self.accelerator.device).unsqueeze(0)
+        with torch.no_grad():
+            latent_data_0 = self.compression_model.encode(data_0).latent_dist.sample()/10
+            latent_data_bg = self.compression_model.encode(data_bg).latent_dist.sample()/10
+            latent_data_1 = self.compression_model.encode(data_1).latent_dist.sample()/10
+        input_latent = torch.cat([latent_data_0,latent_data_bg],dim=1)
+        output = model(input_latent).sample
+        with torch.no_grad():
+            prediction = self.compression_model.decode(output*10).sample
+            ground_truth = self.compression_model.decode(latent_data_1*10).sample
+            previous_value = self.compression_model.decode(latent_data_0*10).sample
+        prediction = prediction.detach().cpu().numpy().squeeze(0)
+        ground_truth = ground_truth.detach().cpu().numpy().squeeze(0)
+        previous_value = previous_value.detach().cpu().numpy().squeeze(0)
         self.visualize_results(prediction, ground_truth, previous_value,self.global_step)

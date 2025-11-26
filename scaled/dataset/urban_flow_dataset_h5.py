@@ -70,7 +70,7 @@ class UrbanFlowDatasetV1(UrbanFlowDataset):
         time_step = self.data_list[idx]
         height_idx = random.randint(0, (self.height-self.subdomain_size)/self.stride)
         width_idx = random.randint(0, (self.width-self.subdomain_size)/self.stride)
-        ori_data,sub_domain_geometry = self.get_data(time_step,height_idx,width_idx)
+        ori_data, sub_domain_geometry = self.get_data(time_step,height_idx,width_idx)
         future_data,_ = self.get_data(time_step+self.skip_timestep,height_idx,width_idx)
         mask_bools = sub_domain_geometry[0].astype(bool)
         bg_data = np.ones_like(ori_data)

@@ -149,6 +149,12 @@ class UrbanflowDiffusionRunner(Runner):
             eps=self.cfg.solver.adam_epsilon,
         )
         self.optimizer = self.accelerator.prepare(self.optimizer)
+
+    def prepare_input(self, batch):
+        data_0 = batch[0].to(self.weight_dtype)
+        data_bg = batch[1].to(self.weight_dtype)
+        data_1 = batch[2].to(self.weight_dtype)
+        return data_0,data_bg,data_1
         
     def run(self,):
         self.generator = torch.Generator(device=self.accelerator.device)
@@ -165,10 +171,8 @@ class UrbanflowDiffusionRunner(Runner):
             for step, batch in enumerate(self.train_dataloader):
                 t_data = time.time() - t_data_start
                 with self.accelerator.accumulate(self.model):
-                    data_0 = batch[0].to(self.weight_dtype)
-                    data_bg = batch[1].to(self.weight_dtype)
-                    data_1 = batch[2].to(self.weight_dtype)  # [B, 2, D//8, H//8, W//8]
-                    noise = torch.rand_like(data_1)
+                    data_0,data_bg,data_1 = self.prepare_input(batch)
+                    noise = torch.randn_like(data_1)
 
                     if self.cfg.noise_offset > 0:
                         noise += self.cfg.noise_offset * torch.randn(
@@ -251,7 +255,6 @@ class UrbanflowDiffusionRunner(Runner):
 
                     if (self.global_step % self.cfg.val.validation_steps == 0) or (self.global_step in self.cfg.val.validation_steps_tuple):
                         if self.accelerator.is_main_process:
-                            
                             unwrap_net = self.accelerator.unwrap_model(self.model)
                             self.save_checkpoint(
                                 unwrap_net,

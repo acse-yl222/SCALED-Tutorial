@@ -150,13 +150,9 @@ class SCALEDUrbanFlowPipeline(DiffusionPipeline):
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps
         batch_size = len(input_latent)
-        
-        
         input_latent = input_latent.to(
             dtype=self.denoising_unet.dtype, device=self.denoising_unet.device
         )
-        
-        
         # if do_classifier_free_guidance:
         #     negtive_previous_flow_value = torch.zeros_like(previous_flow_value)
         #     negtive_background_value = torch.zeros_like(background_value)
