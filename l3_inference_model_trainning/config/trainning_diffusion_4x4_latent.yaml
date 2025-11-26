@@ -1,0 +1,40 @@
+solver:  
+  gradient_accumulation_steps: 1
+  mixed_precision: 'no'
+  enable_xformers_memory_efficient_attention: false
+  gradient_checkpointing: false 
+  max_train_steps: 900000
+  max_grad_norm: 1.0
+  # lr
+  learning_rate: 1e-5
+  scale_lr: false 
+  lr_warmup_steps: 1
+  lr_scheduler: 'constant'
+
+  # optimizer
+  use_8bit_adam: false 
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_weight_decay:  1.0e-2
+  adam_epsilon: 1.0e-8
+
+val:
+  validation_steps: 1000
+  validation_steps_tuple: []
+
+train_bs: 4
+num_workers: 4
+
+weight_dtype: 'fp32'  # [fp16, fp32]
+uncond_ratio: 0.
+noise_offset: 0.
+snr_gamma: 0.
+enable_zero_snr: True
+
+skip_timestep: 50
+seed: 12580
+resume_from_checkpoint: 'latest'
+exp_name: 'trainning_diffusion_4x4_latent'
+output_dir: './exp_output'
+
+prediction_type: "v_prediction"
