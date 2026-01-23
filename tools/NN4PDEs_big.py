@@ -10,9 +10,9 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import h5py
 
-save_path = 'data/SCALED_dataset/south_kensington'
+save_path = 'data/SCALED_dataset/south_kensington_big'
 os.makedirs(save_path,exist_ok=True)
-geometry_path = "data/SCALED_dataset/INHALE_1280.npy"
+geometry_path = "data/geometry/INHALE_4096_64.npy"
 
 os.makedirs(save_path,exist_ok=True)
 
@@ -24,8 +24,8 @@ print(is_gpu)
 # # # ################################### # # #
 # # # ######   Numerial parameters ###### # # #
 # # # ################################### # # #
-nx = 1024
-ny = 1024
+nx = 4096
+ny = 4096
 nz = 64
 dx = 1.0 ; dy = 1.0 ; dz = 1.0
 Re = 0.15
@@ -108,7 +108,7 @@ w_res = torch.zeros([1,1,2,2,2])
 w_res[0,0,:,:,:] = 0.125
 
 ################# Numerical parameters ################
-ntime = 5000                     # Time steps
+ntime = 10000                     # Time steps
 n_out = 1                       # Results output
 iteration = 5                    # Multigrid iteration
 nrestart = 0                      # Last time step for restart
@@ -163,16 +163,16 @@ if LIBM == True:
     sigma = torch.zeros(input_shape, dtype=torch.float32, device=device)
     print(mesh.shape, sigma.shape)
     for i in range(nz):
-        sigma[0,0,i,:,:] = torch.tensor(mesh[0,128:1152,128:1152,i,0])
+        sigma[0,0,i,256:-256,:] = torch.tensor(mesh[0,0,i,:,:])
     sigma = sigma.transpose_(4, 3)
     sigma = torch.flip(sigma, [3])
     sigma = torch.where(sigma == 0, torch.tensor(1e08, dtype=torch.float32, device=device), torch.tensor(0, dtype=torch.float32, device=device))
     plt.imshow(sigma[0,0,4,:,:].cpu())
     plt.colorbar()
-    plt.savefig('South_Kensington.jpg')
+    plt.savefig('south_kensington_big.jpg')
     plt.close()
     
-np.save('data/SCALED_dataset/south_kensington/sigma.npy', sigma.cpu().numpy())
+np.save('data/SCALED_dataset/south_kensington_big/sigma.npy', sigma.cpu().numpy())
 
 #######################################################
 # # # ################################### # # #
