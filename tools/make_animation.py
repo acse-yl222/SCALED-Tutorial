@@ -46,15 +46,4 @@ def images_to_gif(folder_path, output_path="output.gif", duration=100, resize_fa
     )
 
     print(f"✅ GIF 已生成：{output_path}")
-
-# images_to_gif('result_u',output_path='u.gif',duration=5)
-# images_to_gif('result',output_path='xy.gif',duration=5)
-# images_to_gif('result_h',output_path='xz.gif',duration=5)
-
 images_to_gif('result',output_path='result.gif',duration=5)
-
-
-# images_to_gif('south_kensington','south_kensington.gif',duration=5)
-# images_to_gif('LondonAirpot','LondonAirpot.gif',duration=5)
-# images_to_gif('Canary Wharf','CanaryWharf.gif',duration=5)
-# images_to_gif('LondonBridge','LondonBridge.gif',duration=5)

@@ -28,12 +28,14 @@ def visualize(data,step=0):
     plt.savefig(f'result/{step:03d}.png',dpi=300)
     plt.close()
     
-def get_velocity_filed(index,start_x,start_y,width,height):
+def get_velocity_filed(index,start_x,start_y,width,height,device,dtype=torch.float32):
     path = f'data/SCALED_dataset/south_kensington/00{index}.h5'
     import h5py
     with h5py.File(path, 'r') as h5f:
         velocity = h5f['uvw'][:]
-    return torch.tensor(velocity)[:,:,start_x:start_x+width,start_y:start_y+height]/3
+    result = torch.tensor(velocity, device=device, dtype=dtype)[:,:,start_x:start_x+width,start_y:start_y+height]/3
+    result = result.unsqueeze(0)
+    return result
 
 def load_compression_model(weight_path,device):
     model = AutoencoderKL(
@@ -65,8 +67,9 @@ def load_inference_model(weight_path,device):
     model.to(device).eval()
     return model
 
-def load_geometry(path,start_x,start_y,width,height):
-    geometry = torch.tensor(np.load(path))[:,start_x:start_x+width,start_y:start_y+height]
+def load_geometry(path,start_x,start_y,width,height,device,dtype=torch.float32):
+    geometry = torch.tensor(np.load(path))[0,0,:,start_x:start_x+width,start_y:start_y+height]/1e8
+    geometry = geometry.to(device=device, dtype=dtype)
     return geometry
 
 def pack_boundary_condition(velocity_field,geometry,halo_size=4):
@@ -89,8 +92,8 @@ def get_noise_scheduler():
     )
     return noise_scheduler
 
-width = 128
-height = 128
+width = 256
+height = 256
 depth = 64
 # area start point:
 x = 256
@@ -110,17 +113,15 @@ compression_model = load_compression_model(compression_weight, device)
 inference_model = load_inference_model(inference_weight, device)
 val_noise_scheduler = get_noise_scheduler()
 
-geometry = load_geometry(geometry_path,x,y,width,height).to(device)
-x0 = get_velocity_filed(initial_index,x,y,width,height).unsqueeze(0).to(device)
-x1 = get_velocity_filed(initial_index+50,x,y,width,height).unsqueeze(0).to(device)
-bc = pack_boundary_condition(x1,geometry).unsqueeze(0)
-
+geometry = load_geometry(geometry_path,x,y,width,height,device)
+x0 = get_velocity_filed(initial_index,x,y,width,height,device)
+latent_x0 = compression_model.encode(x0)/10
 pipe = SCALEDUrbanFlowPipeline(inference_model,val_noise_scheduler)
 
 with torch.no_grad():
     for step in tqdm(range(100)):
-        latent_x0 = compression_model.encode(x0)/10
-        x_i = get_velocity_filed(initial_index+(step+1)*50,x,y,width,height).unsqueeze(0).to(device)
+        x_i = get_velocity_filed(initial_index+(step+1)*50,x,y,width,height,device)
+        bc = pack_boundary_condition(x_i,geometry)
         latent_xbc = compression_model.encode(bc)/10
         input = torch.cat([latent_x0,latent_xbc],dim=1)
         output = pipe(
@@ -130,3 +131,5 @@ with torch.no_grad():
                 generator=torch.manual_seed(12580),
                 return_dict=False,)
         latent_x0 = output.clone()
+        primitive_x0 = compression_model.decode(latent_x0*10)
+        visualize(primitive_x0[0,1,3,:, :].cpu().numpy(),step=step)
