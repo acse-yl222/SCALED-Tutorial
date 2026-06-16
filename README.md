@@ -2,6 +2,10 @@
 
 This repository hosts the hands-on material for the WP4 segment of the **SCALED Tutorial**, where we practice building scalable, learning-enabled digital twins for physics-based systems. The codebase is intentionally lightweight: each lesson exposes a single Python entry point that you can expand with your own models, data loading logic, and evaluation pipelines.
 
+### License
+
+This project is available under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, modify, and share it for non-commercial purposes, but commercial use is not permitted.
+
 ### Learning Path
 
 | Lesson | Folder | Focus |
